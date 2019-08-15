@@ -3,8 +3,13 @@ import 'dart:io';
 import 'package:agenda_contatos/model/Contato.dart';
 import 'package:agenda_contatos/model/contato_banco.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import 'novoContato.dart';
 
 class Home_Page extends StatefulWidget {
+  Color corPadrao = Color.fromRGBO(220, 20, 60, 1);
+
   @override
   _Home_PageState createState() => _Home_PageState();
 }
@@ -12,19 +17,16 @@ class Home_Page extends StatefulWidget {
 class _Home_PageState extends State<Home_Page> {
   ContatoBanco banco = ContatoBanco();
   List<Contato> contatos = List();
+  bool _excluir = false;
 
   @override
   void initState() {
-    banco.getTodosContatos().then((list) {
-      setState(() {
-        contatos = list;
-      });
-    });
+    _atualizarContatos();
   }
 
   appbar() {
     return AppBar(
-      backgroundColor: Color.fromRGBO(220, 20, 60, 1),
+      backgroundColor: widget.corPadrao,
       title: Text("Contatos"),
       centerTitle: true,
       actions: <Widget>[
@@ -44,9 +46,11 @@ class _Home_PageState extends State<Home_Page> {
       backgroundColor: Colors.white,
       appBar: appbar(),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {},
+        onPressed: () {
+          _showViewContato();
+        },
         child: Icon(Icons.add),
-        backgroundColor: Color.fromRGBO(220, 20, 60, 1),
+        backgroundColor: widget.corPadrao,
       ),
       body: listViewDeContatos(),
     );
@@ -97,13 +101,119 @@ class _Home_PageState extends State<Home_Page> {
         child: Padding(
           padding: EdgeInsets.all(10),
           child: Row(
-            children: <Widget>[
-              imagemContato(index),
-              informacoesContato(index)
-            ],
+            children: <Widget>[imagemContato(index), informacoesContato(index)],
           ),
         ),
       ),
+      onTap: () {
+        _showOptions(context, index);
+      },
     );
+  }
+
+  Future _showViewContato({Contato contato}) async {
+    final recContato = await Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (context) => ViewNovoContato(
+                  contato: contato,
+                )));
+
+    if (recContato != null) {
+      if (contato != null) {
+        await banco.atualizarContato(recContato);
+      } else {
+        await banco.salvarConato(recContato);
+      }
+      _atualizarContatos();
+    } else {}
+  }
+
+  void _atualizarContatos() {
+    banco.getTodosContatos().then((list) {
+      setState(() {
+        contatos = list;
+      });
+    });
+  }
+
+  criarBotao(index, texto, onPress()) {
+    return FlatButton(
+      child: Text(
+        texto,
+        style: TextStyle(color: Colors.pink, fontSize: 18),
+      ),
+      onPressed: onPress
+    );
+  }
+
+  containerOptions(index) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        criarBotao(index, "Ligar", () {
+          launch("tel:${contatos[index].phone}");
+          Navigator.pop(context);
+        }),
+        Divider(height: 3),
+        criarBotao(index, "Editar", () {
+          Navigator.pop(context);
+          _showViewContato(contato: contatos[index]);
+        }),
+        Divider(height: 3),
+        criarBotao(index, "Excluir", ()async {
+          await _confirmarExclusao();
+          if (_excluir) {
+            banco.deletarConato(contatos[index].id);
+            setState(() {
+              contatos.removeAt(index);
+              Navigator.pop(context);
+            });
+          }
+        }),
+      ],
+    );
+  }
+
+  void _showOptions(context, index) {
+    showModalBottomSheet(
+        context: context,
+        builder: (context) {
+          return BottomSheet(
+            onClosing: () {},
+            builder: (context) {
+              return Container(
+                  padding: EdgeInsets.all(10), child: containerOptions(index));
+            },
+          );
+        });
+  }
+
+  _confirmarExclusao() async {
+    await showDialog(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: Text("Tem certeza que deseja excluir esse contato ?"),
+            content: Text("Ao excluir todas as informações serão perdidas."),
+            actions: <Widget>[
+              FlatButton(
+                child: Text("Cancelar"),
+                onPressed: () {
+                  Navigator.pop(context);
+                  Navigator.pop(context);
+                  _excluir = false;
+                },
+              ),
+              FlatButton(
+                child: Text("Sim"),
+                onPressed: () {
+                  Navigator.pop(context);
+                  _excluir = true;
+                },
+              )
+            ],
+          );
+        });
   }
 }
